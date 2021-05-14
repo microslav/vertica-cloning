@@ -1,0 +1,203 @@
+# Clone a Vertica DB and Test Reviving it on Another Cluster
+---
+- name: Clone a Vertica DB and Test Reviving it on Another Cluster
+  hosts: localhost
+  vars:
+    src_hg: "cluster1"
+    dst_hg: "cluster2"
+  gather_facts: no
+  tasks:
+    - name: Make variables persistent across plays
+      set_fact: 
+        src_group: "{{ src_hg }}"
+        dst_group: "{{ dst_hg }}"
+        src_host: "{{ groups[lookup('vars','src_hg')][0] }}"
+        dst_host: "{{ groups[lookup('vars','dst_hg')][0] }}"
+        vs_usage: >-
+          select proj, ROS_num, rows_mln, GB from (
+            select projection_name proj, sum(ros_count) ROS_num, round(sum(row_count)/10^6,2) as rows_mln, round(sum(used_bytes)/1024^3,2) as GB 
+            from projection_storage where 1=1 group by 1
+          ) as x where GB > 0 order by GB desc;
+- name: Run on source cluster 
+  hosts: "{{ src_host }}"
+  vars:
+    src_host: "{{ hostvars['localhost']['src_host'] }}"
+    src_prefix: "/prod/"
+    dst_prefix: "/test/"
+    run_as: "dbadmin"
+    aws_profile: "default"
+    fb_s3_url: "http://poc-fb-data:80"
+    vs_usage: "{{ hostvars['localhost']['vs_usage'] }}"
+  gather_facts: yes
+  tasks:
+    - set_fact:
+        my_s5: "AWS_PROFILE={{ aws_profile }} s5cmd --endpoint-url={{ fb_s3_url }}"
+    
+    - name: Get source cluster database name
+      shell:
+        cmd: "vsql -tc \"select dbname();\" | sed '/^$/d' | sed 's/ //g'"
+      become: yes
+      become_user: "{{ run_as }}"
+      become_method: su
+      register: out
+    - set_fact: 
+        db_name: "{{ out.stdout }}"
+    - debug: msg="Source database is {{ db_name }}"
+
+    - name: Get source communal storage path
+      shell:
+        cmd: "vsql -tc \"select location_path from storage_locations where node_name is null and location_path like 's3://%';\" | sed -e '/^$/d' -e 's/ //g'"
+      become: yes
+      become_user: "{{ run_as }}"
+      become_method: su
+      register: out
+    - set_fact: 
+        src_s3_path: "{{ out.stdout }}"
+        dst_s3_path: "{{ out.stdout | replace(src_prefix,dst_prefix) }}"
+    - debug: msg="Source S3 is {{ src_s3_path }} and Destination S3 is {{ dst_s3_path }}"
+
+    - name: Display large Projections from source database
+      shell:
+        cmd: "vsql -c \"{{ vs_usage }}\" | sed '/^$/d'"
+      become: yes
+      become_user: "{{ run_as }}"
+      become_method: su
+      register: out
+    - debug: var=out.stdout_lines
+
+- name: Run on destination cluster
+  hosts: "{{ dst_host }}"
+  vars:
+    src_host: "{{ hostvars['localhost']['src_host'] }}"
+    dst_host: "{{ hostvars['localhost']['dst_host'] }}"
+    dst_nodes: "{{ groups[hostvars['localhost']['dst_group']] | map('extract', hostvars, ['inventory_hostname_short']) | join(',') }}"
+    run_as: "dbadmin"
+    auth_path: "/home/{{ run_as }}/auth_params.conf"
+    grab_exe: "grab_lease_now"
+    tmp_conf: "/tmp/{{ run_as }}_new_cluster_config.json"
+    my_s5: "{{ hostvars[lookup('vars','src_host')]['my_s5'] }}"
+    db_name: "{{ hostvars[lookup('vars','src_host')]['db_name'] }}"
+    src_s3_path: "{{ hostvars[lookup('vars','src_host')]['src_s3_path'] }}"
+    dst_s3_path: "{{ hostvars[lookup('vars','src_host')]['dst_s3_path'] }}"
+    vs_usage: "{{ hostvars['localhost']['vs_usage'] }}"
+  gather_facts: yes
+  tasks:
+    - name: Tune destination cluster host to handle more open connections and reuse time_wait sockets
+      sysctl:
+        name: "{{ item.name }}"
+        value: "{{ item.value }}"
+        sysctl_set: yes
+      with_items:
+        - { name: "net.ipv4.tcp_fin_timeout", value: "20" }
+        - { name: "net.ipv4.tcp_tw_reuse", value: "1" }
+        - { name: "net.ipv4.ip_local_port_range", value: "16384 65535" }
+
+    - name: Make sure the lease takeover script is available in the cluster
+      copy: 
+        src: "roles/files/{{ grab_exe }}"
+        dest: "/opt/vertica/bin/"
+        mode: "0755"
+
+    - name: Generate the updated cluster_config.json file 
+      shell: 
+        cmd: "{{ my_s5 }} cat '{{ src_s3_path }}metadata/verticadb/cluster_config.json' | {{ grab_exe }} > {{ tmp_conf }}"
+      become: yes
+      become_user: "{{ run_as }}"
+      become_method: su
+      register: out
+    - debug: var=out.stdout_lines
+
+    - name: Clone the {{ db_name }} database to the destination path
+      shell:
+        cmd: "{{ my_s5 }} --log=error cp '{{ src_s3_path }}*' {{ dst_s3_path }}"
+      become: yes
+      become_user: "{{ run_as }}"
+      become_method: su
+      register: out
+    - debug: var=out
+
+    - name: Check the size of the cloned path
+      shell:
+        cmd: "{{ my_s5 }} du -H '{{ dst_s3_path }}*'"
+      become: yes
+      become_user: "{{ run_as }}"
+      become_method: su
+      register: out
+    - debug: var=out.stdout_lines
+
+    - name: Push updated cluster_config.json file to clone path
+      shell:
+        cmd: "{{ my_s5 }} cp {{ tmp_conf }} {{ dst_s3_path }}metadata/verticadb/cluster_config.json"
+      become: yes
+      become_user: "{{ run_as }}"
+      become_method: su
+      register: out
+    - debug: var=out.stdout_lines
+
+    - name: Revive the clone database on the destination cluster
+      shell:
+        cmd: >-
+          /opt/vertica/bin/admintools -t revive_db
+          --database={{ db_name }}
+          --hosts={{ dst_nodes }}
+          --communal-storage-params={{ auth_path }}
+          --communal-storage-location={{ dst_s3_path }}
+      become: yes
+      become_user: "{{ run_as }}"
+      become_method: su
+      register: out
+    - debug: var=out.stdout_lines
+
+    - name: Start the cloned database as a test
+      shell:
+        cmd: >-
+          /opt/vertica/bin/admintools -t start_db
+          --database={{ db_name }}
+      become: yes
+      become_user: "{{ run_as }}"
+      become_method: su
+      register: out
+    - debug: var=out.stdout_lines
+
+    - name: Display large Projections from cloned database
+      shell:
+        cmd: "vsql -c \"{{ vs_usage }}\" | sed '/^$/d'"
+      become: yes
+      become_user: "{{ run_as }}"
+      become_method: su
+      register: out
+    - debug: var=out.stdout_lines
+
+    - name: Stop the cloned database 
+      shell:
+        cmd: >-
+          /opt/vertica/bin/admintools -t stop_db
+          --database={{ db_name }}
+          --force --noprompts
+      become: yes
+      become_user: "{{ run_as }}"
+      become_method: su
+      register: out
+    - debug: var=out.stdout_lines
+
+    - name: Drop the cloned database 
+      shell:
+        cmd: >-
+          /opt/vertica/bin/admintools -t drop_db
+          --database={{ db_name }}
+      become: yes
+      become_user: "{{ run_as }}"
+      become_method: su
+      register: out
+    - debug: var=out.stdout_lines
+
+    - name: Delete the cloned Communal storage for{{ db_name }} database at the destination path
+      shell:
+        cmd: "{{ my_s5 }} --log=error rm '{{ dst_s3_path }}*'"
+      become: yes
+      become_user: "{{ run_as }}"
+      become_method: su
+      register: out
+    - debug: var=out.stdout_lines
+
+...

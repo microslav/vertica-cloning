@@ -20,14 +20,14 @@
         src_prefix: "{{ lookup('env','SRC_PREFIX') }}"
         src_bucket: "{{ lookup('env','SRC_BUCKET') }}"
         src_aws_profile: "{{ lookup('env','SRC_AWS_PROFILE') }}"
-        src_s5: "AWS_PROFILE={{ src_aws_profile }} s5cmd --endpoint-url=http://{{ src_fb_data }}:80"
+        src_s5: "{{ lookup('env','SRC_S5') }}"
         dst_fb_mgmt: "{{ lookup('env','DST_FB_MGMT') }}"
         dst_fb_data: "{{ lookup('env','DST_FB_DATA') }}"
         dst_fb_api: "{{ lookup('env','DST_FB_API') }}"
         dst_prefix: "{{ lookup('env','DST_PREFIX') }}"
         dst_bucket: "{{ lookup('env','DST_BUCKET') }}"
         dst_aws_profile: "{{ lookup('env','DST_AWS_PROFILE') }}"
-        dst_s5: "AWS_PROFILE={{ dst_aws_profile }} s5cmd --endpoint-url=http://{{ dst_fb_data }}:80"
+        dst_s5: "{{ lookup('env','DST_S5') }}"
         run_as: "{{ lookup('env','RUN_AS') }}"
         vs_usage: >-
           select proj, ROS_num, rows_mln, GB from (

@@ -22,6 +22,7 @@ export SRC_FB_DATA="10.99.100.101"
 export SRC_FB_API="T-deadbeef-f00d-cafe-feed-1337c0ffee"
 export SRC_BUCKET="bos"
 export SRC_PREFIX="/prod/"
+export SRC_AWS_PROFILE="default"
 
 ### Destination/Target-side info for the DR demo
 export DST_FB_MGMT="10.99.101.100"
@@ -29,6 +30,7 @@ export DST_FB_DATA="10.99.101.101"
 export DST_FB_API="T-deadbeef-f00d-cafe-feed-1337c0ffee"
 export DST_BUCKET="bos-dr"
 export DST_PREFIX="/test/"
+export DST_AWS_PROFILE="default"
 
 ### Info for the Cloning demo
 export PUREFB_API="$DST_FB_API"

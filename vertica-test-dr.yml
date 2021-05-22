@@ -19,11 +19,15 @@
         src_fb_api: "{{ lookup('env','SRC_FB_API') }}"
         src_prefix: "{{ lookup('env','SRC_PREFIX') }}"
         src_bucket: "{{ lookup('env','SRC_BUCKET') }}"
+        src_aws_profile: "{{ lookup('env','SRC_AWS_PROFILE') }}"
+        src_s5: "AWS_PROFILE={{ src_aws_profile }} s5cmd --endpoint-url=http://{{ src_fb_data }}:80"
         dst_fb_mgmt: "{{ lookup('env','DST_FB_MGMT') }}"
         dst_fb_data: "{{ lookup('env','DST_FB_DATA') }}"
         dst_fb_api: "{{ lookup('env','DST_FB_API') }}"
         dst_prefix: "{{ lookup('env','DST_PREFIX') }}"
         dst_bucket: "{{ lookup('env','DST_BUCKET') }}"
+        dst_aws_profile: "{{ lookup('env','DST_AWS_PROFILE') }}"
+        dst_s5: "AWS_PROFILE={{ dst_aws_profile }} s5cmd --endpoint-url=http://{{ dst_fb_data }}:80"
         run_as: "{{ lookup('env','RUN_AS') }}"
         vs_usage: >-
           select proj, ROS_num, rows_mln, GB from (
@@ -42,17 +46,11 @@
     src_bucket: "{{ hostvars['localhost']['src_bucket'] }}"
     dst_bucket: "{{ hostvars['localhost']['dst_bucket'] }}"
     run_as: "{{ hostvars['localhost']['run_as'] }}"
-    # Use object credential import in Purity//FB 3.1 to set dbadmin credentials to same values on both src and dst FB
-    aws_profile: "default"
-    fb_s3_url: "http://{{ hostvars['localhost']['dst_fb_data'] }}:80"
     vs_usage: "{{ hostvars['localhost']['vs_usage'] }}"
     count_star: "{{ hostvars['localhost']['count_star'] }}"
   gather_facts: yes
   tasks:
   # Run on Source Cluster
-    - set_fact:
-        my_s5: "AWS_PROFILE={{ aws_profile }} s5cmd --endpoint-url={{ fb_s3_url }}"
-
     - name: <<SRC>> Get source cluster database name
       shell:
         cmd: "vsql -tc \"select dbname();\" | sed '/^$/d' | sed 's/ //g'"
@@ -72,8 +70,8 @@
       become_method: su
       register: out
     - set_fact:
-        clone_s3_src: "{{ out.stdout | replace(src_bucket,dst_bucket) }}"
-        clone_s3_dst: "{{ out.stdout | replace(src_bucket,dst_bucket) | replace(src_prefix,dst_prefix) }}"
+        clone_s3_src: "{{ out.stdout | replace(src_bucket,dst_bucket) }}/"
+        clone_s3_dst: "{{ out.stdout | replace(src_bucket,dst_bucket) | replace(src_prefix,dst_prefix) }}/"
     - debug: msg="DR Site Source S3 is {{ clone_s3_src }} and Destination S3 is {{ clone_s3_dst }}"
 
     - name: <<SRC>> Display large Projections from source database
@@ -98,8 +96,8 @@
       shell:
         cmd: >-
           vsql -qt -c "ALTER DATABASE DEFAULT SET CatalogSyncInterval = '10 years';" &&
-          vsql -qt -c 'SELECT flush_data_collector();' &&
-          vsql -qt -c 'SELECT flush_reaper_queue();'
+           vsql -qt -c 'SELECT flush_data_collector();' &&
+           vsql -qt -c 'SELECT flush_reaper_queue();'
       become: yes
       become_user: "{{ run_as }}"
       become_method: su
@@ -119,15 +117,6 @@
       until: out.stdout_lines[0] == "TRUE"
       retries: 12
       delay: 5
-
-    - name: <<SRC>> Get du -H for source
-      shell:
-        cmd: "{{ my_s5 }} du -H '{{ clone_s3_src }}*'"
-      become: yes
-      become_user: "{{ run_as }}"
-      become_method: su
-      register: out
-    - debug: var=out.stdout_lines
 
 
 - name: ---==> LOCAL <==--- Wait out the replication lag
@@ -175,7 +164,7 @@
     auth_path: "/home/{{ run_as }}/auth_params.conf"
     grab_exe: "grab_lease_now"
     tmp_conf: "/tmp/{{ run_as }}_new_cluster_config.json"
-    my_s5: "{{ hostvars[lookup('vars','src_host')]['my_s5'] }}"
+    my_s5: "{{ hostvars['localhost']['dst_s5'] }}"
     db_name: "{{ hostvars[lookup('vars','src_host')]['db_name'] }}"
     clone_s3_src: "{{ hostvars[lookup('vars','src_host')]['clone_s3_src'] }}"
     clone_s3_dst: "{{ hostvars[lookup('vars','src_host')]['clone_s3_dst'] }}"
@@ -197,6 +186,15 @@
         dest: "/opt/vertica/bin/"
         mode: "0755"
 
+    - name: <<DST>> Get du -H for clone source prefix
+      shell:
+        cmd: "{{ my_s5 }} du -H '{{ clone_s3_src }}*'"
+      become: yes
+      become_user: "{{ run_as }}"
+      become_method: su
+      register: out
+    - debug: var=out.stdout_lines
+
     - name: <<DST>> Clone the {{ db_name }} database to the destination path
       shell:
         cmd: "{{ my_s5 }} --log=error cp '{{ clone_s3_src }}*' {{ clone_s3_dst }}"
@@ -206,7 +204,7 @@
       register: out
     - debug: var=out
 
-    - name: <<DST>> Check the size of the cloned path
+    - name: <<DST>> Check the size of the cloned destination prefix
       shell:
         cmd: "{{ my_s5 }} du -H '{{ clone_s3_dst }}*'"
       become: yes
@@ -258,7 +256,7 @@
     dst_nodes: "{{ groups[hostvars['localhost']['dst_group']] | map('extract', hostvars, ['inventory_hostname_short']) | join(',') }}"
     run_as: "{{ hostvars['localhost']['run_as'] }}"
     auth_path: "/home/{{ run_as }}/auth_params.conf"
-    my_s5: "{{ hostvars[lookup('vars','src_host')]['my_s5'] }}"
+    my_s5: "{{ hostvars['localhost']['dst_s5'] }}"
     db_name: "{{ hostvars[lookup('vars','src_host')]['db_name'] }}"
     clone_s3_dst: "{{ hostvars[lookup('vars','src_host')]['clone_s3_dst'] }}"
     vs_usage: "{{ hostvars['localhost']['vs_usage'] }}"

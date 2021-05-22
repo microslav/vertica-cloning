@@ -161,6 +161,7 @@
     dst_host: "{{ hostvars['localhost']['dst_host'] }}"
     dst_nodes: "{{ groups[hostvars['localhost']['dst_group']] | map('extract', hostvars, ['inventory_hostname_short']) | join(',') }}"
     run_as: "{{ hostvars['localhost']['run_as'] }}"
+    grab_exe: "grab_lease_now"
     auth_path: "/home/{{ run_as }}/auth_params.conf"
     tmp_conf: "/tmp/{{ run_as }}_new_cluster_config.json"
     my_s5: "{{ hostvars['localhost']['dst_s5'] }}"

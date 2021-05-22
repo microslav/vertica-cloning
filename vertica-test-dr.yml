@@ -214,6 +214,39 @@
       register: out
     - debug: var=out.stdout_lines
 
+
+- name: ---==> SOURCE <==--- Resume periodic catalog updates on source database
+  hosts: "{{ src_host }}"
+  vars:
+    src_host: "{{ hostvars['localhost']['src_host'] }}"
+    run_as: "{{ hostvars['localhost']['run_as'] }}"
+  gather_facts: yes
+  tasks:
+  - name: <<SRC>> Resume catalog updates and sync
+    shell:
+      cmd: "vsql -qt -c \"ALTER DATABASE DEFAULT CLEAR CatalogSyncInterval; SELECT sync_catalog();\" "
+    become: yes
+    become_user: "{{ run_as }}"
+    become_method: su
+    register: out
+  - debug: var=out.stdout_lines
+  # In production it'll be important to resume the catalog updates manually if the playbook
+  # fails before this this step is run. Don't want too much of a backlog.
+
+- name: ---==> DESTINATION <==--- Test the Cloned Database on the Destination Cluster
+  hosts: "{{ dst_host }}"
+  vars:
+    src_host: "{{ hostvars['localhost']['src_host'] }}"
+    dst_host: "{{ hostvars['localhost']['dst_host'] }}"
+    dst_nodes: "{{ groups[hostvars['localhost']['dst_group']] | map('extract', hostvars, ['inventory_hostname_short']) | join(',') }}"
+    run_as: "{{ hostvars['localhost']['run_as'] }}"
+    auth_path: "/home/{{ run_as }}/auth_params.conf"
+    my_s5: "{{ hostvars['localhost']['dst_s5'] }}"
+    db_name: "{{ hostvars[lookup('vars','src_host')]['db_name'] }}"
+    clone_s3_dst: "{{ hostvars[lookup('vars','src_host')]['clone_s3_dst'] }}"
+    vs_usage: "{{ hostvars['localhost']['vs_usage'] }}"
+  gather_facts: yes
+  tasks:
     - name: <<DST>> Generate the updated cluster_config.json file
       shell:
         cmd: "{{ my_s5 }} cat '{{ clone_s3_dst }}metadata/verticadb/cluster_config.json' | {{ grab_exe }} > {{ tmp_conf }}"
@@ -232,37 +265,6 @@
       register: out
     - debug: var=out.stdout_lines
 
-
-- name: ---==> SOURCE <==--- Resume periodic catalog updates on source database
-  hosts: "{{ src_host }}"
-  vars:
-    src_host: "{{ hostvars['localhost']['src_host'] }}"
-    run_as: "{{ hostvars['localhost']['run_as'] }}"
-  gather_facts: yes
-  tasks:
-  - name: <<SRC>> Resume catalog updates and sync
-    shell:
-      cmd: "vsql -qt -c \"ALTER DATABASE DEFAULT CLEAR CatalogSyncInterval; SELECT sync_catalog();\" "
-    become: yes
-    become_user: "{{ run_as }}"
-    become_method: su
-    register: out
-  - debug: var=out.stdout_lines
-
-
-- name: ---==> DESTINATION <==--- Clone and Test from Destination Bucket on Destination Cluster
-  hosts: "{{ dst_host }}"
-  vars:
-    dst_host: "{{ hostvars['localhost']['dst_host'] }}"
-    dst_nodes: "{{ groups[hostvars['localhost']['dst_group']] | map('extract', hostvars, ['inventory_hostname_short']) | join(',') }}"
-    run_as: "{{ hostvars['localhost']['run_as'] }}"
-    auth_path: "/home/{{ run_as }}/auth_params.conf"
-    my_s5: "{{ hostvars['localhost']['dst_s5'] }}"
-    db_name: "{{ hostvars[lookup('vars','src_host')]['db_name'] }}"
-    clone_s3_dst: "{{ hostvars[lookup('vars','src_host')]['clone_s3_dst'] }}"
-    vs_usage: "{{ hostvars['localhost']['vs_usage'] }}"
-  gather_facts: yes
-  tasks:
     - name: <<DST>> Revive the clone database on the destination cluster
       shell:
         cmd: >-

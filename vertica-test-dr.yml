@@ -24,7 +24,7 @@
         dst_fb_api: "{{ lookup('env','DST_FB_API') }}"
         dst_prefix: "{{ lookup('env','DST_PREFIX') }}"
         dst_bucket: "{{ lookup('env','DST_BUCKET') }}"
-        run_as: "{{ lookup('env','') }}"
+        run_as: "{{ lookup('env','RUN_AS') }}"
         vs_usage: >-
           select proj, ROS_num, rows_mln, GB from (
             select projection_name proj, sum(ros_count) ROS_num, round(sum(row_count)/10^6,2) as rows_mln, round(sum(used_bytes)/1024^3,2) as GB
@@ -140,7 +140,7 @@
   - name: <<LOC>> Collect FlashBlade bucket replication info
     purefb_info:
       gather_subset:
-        - bucket_replication
+        - replication
       fb_url: "{{ src_fb_mgmt }}"
       api_token: "{{ src_fb_api }}"
     ignore_errors: yes

@@ -8,31 +8,31 @@
   gather_facts: no
   tasks:
     - name: Make variables persistent across plays
-      set_fact: 
+      set_fact:
         src_group: "{{ src_hg }}"
         dst_group: "{{ dst_hg }}"
         src_host: "{{ groups[lookup('vars','src_hg')][0] }}"
         dst_host: "{{ groups[lookup('vars','dst_hg')][0] }}"
         vs_usage: >-
           select proj, ROS_num, rows_mln, GB from (
-            select projection_name proj, sum(ros_count) ROS_num, round(sum(row_count)/10^6,2) as rows_mln, round(sum(used_bytes)/1024^3,2) as GB 
+            select projection_name proj, sum(ros_count) ROS_num, round(sum(row_count)/10^6,2) as rows_mln, round(sum(used_bytes)/1024^3,2) as GB
             from projection_storage where 1=1 group by 1
           ) as x where GB > 0 order by GB desc;
-- name: Run on source cluster 
+- name: Run on source cluster
   hosts: "{{ src_host }}"
   vars:
     src_host: "{{ hostvars['localhost']['src_host'] }}"
-    src_prefix: "/prod/"
-    dst_prefix: "/test/"
-    run_as: "dbadmin"
+    src_prefix: "{{ lookup('env','CLN_SRC_PRE') }}"
+    dst_prefix: "{{ lookup('env','CLN_DST_PRE') }}"
+    run_as: "{{ lookup('env','RUN_AS') }}"
     aws_profile: "default"
-    fb_s3_url: "http://poc-fb-data:80"
+    fb_s3_url: "http://{{ lookup('env','PUREFB_DAT') }}:80"
     vs_usage: "{{ hostvars['localhost']['vs_usage'] }}"
   gather_facts: yes
   tasks:
     - set_fact:
         my_s5: "AWS_PROFILE={{ aws_profile }} s5cmd --endpoint-url={{ fb_s3_url }}"
-    
+
     - name: Get source cluster database name
       shell:
         cmd: "vsql -tc \"select dbname();\" | sed '/^$/d' | sed 's/ //g'"
@@ -40,7 +40,7 @@
       become_user: "{{ run_as }}"
       become_method: su
       register: out
-    - set_fact: 
+    - set_fact:
         db_name: "{{ out.stdout }}"
     - debug: msg="Source database is {{ db_name }}"
 
@@ -51,7 +51,7 @@
       become_user: "{{ run_as }}"
       become_method: su
       register: out
-    - set_fact: 
+    - set_fact:
         src_s3_path: "{{ out.stdout }}"
         dst_s3_path: "{{ out.stdout | replace(src_prefix,dst_prefix) }}"
     - debug: msg="Source S3 is {{ src_s3_path }} and Destination S3 is {{ dst_s3_path }}"
@@ -71,7 +71,7 @@
     src_host: "{{ hostvars['localhost']['src_host'] }}"
     dst_host: "{{ hostvars['localhost']['dst_host'] }}"
     dst_nodes: "{{ groups[hostvars['localhost']['dst_group']] | map('extract', hostvars, ['inventory_hostname_short']) | join(',') }}"
-    run_as: "dbadmin"
+    run_as: "{{ lookup('env','RUN_AS') }}"
     auth_path: "/home/{{ run_as }}/auth_params.conf"
     grab_exe: "grab_lease_now"
     tmp_conf: "/tmp/{{ run_as }}_new_cluster_config.json"
@@ -93,13 +93,13 @@
         - { name: "net.ipv4.ip_local_port_range", value: "16384 65535" }
 
     - name: Make sure the lease takeover script is available in the cluster
-      copy: 
+      copy:
         src: "roles/files/{{ grab_exe }}"
         dest: "/opt/vertica/bin/"
         mode: "0755"
 
-    - name: Generate the updated cluster_config.json file 
-      shell: 
+    - name: Generate the updated cluster_config.json file
+      shell:
         cmd: "{{ my_s5 }} cat '{{ src_s3_path }}metadata/verticadb/cluster_config.json' | {{ grab_exe }} > {{ tmp_conf }}"
       become: yes
       become_user: "{{ run_as }}"
@@ -168,7 +168,7 @@
       register: out
     - debug: var=out.stdout_lines
 
-    - name: Stop the cloned database 
+    - name: Stop the cloned database
       shell:
         cmd: >-
           /opt/vertica/bin/admintools -t stop_db
@@ -180,7 +180,7 @@
       register: out
     - debug: var=out.stdout_lines
 
-    - name: Drop the cloned database 
+    - name: Drop the cloned database
       shell:
         cmd: >-
           /opt/vertica/bin/admintools -t drop_db

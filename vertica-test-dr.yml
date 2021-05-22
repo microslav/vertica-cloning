@@ -8,7 +8,7 @@
   gather_facts: yes
   tasks:
   # Run on localhost
-    - name: <<LOC>> Make variables persistent across plays
+    - name: <<LOC>> Make variables available across plays
       set_fact:
         src_group: "{{ src_hg }}"
         dst_group: "{{ dst_hg }}"
@@ -17,14 +17,14 @@
         src_fb_mgmt: "{{ lookup('env','SRC_FB_MGMT') }}"
         src_fb_data: "{{ lookup('env','SRC_FB_DATA') }}"
         src_fb_api: "{{ lookup('env','SRC_FB_API') }}"
+        src_prefix: "{{ lookup('env','SRC_PREFIX') }}"
+        src_bucket: "{{ lookup('env','SRC_BUCKET') }}"
         dst_fb_mgmt: "{{ lookup('env','DST_FB_MGMT') }}"
         dst_fb_data: "{{ lookup('env','DST_FB_DATA') }}"
-        src_fb_api: "{{ lookup('env','SRC_FB_API') }}"
-        src_prefix: "/prod/"
-        dst_prefix: "/test/"
-        src_bucket: "bos"
-        dst_bucket: "bos-dr"
-        run_as: "dbadmin"
+        dst_fb_api: "{{ lookup('env','DST_FB_API') }}"
+        dst_prefix: "{{ lookup('env','DST_PREFIX') }}"
+        dst_bucket: "{{ lookup('env','DST_BUCKET') }}"
+        run_as: "{{ lookup('env','') }}"
         vs_usage: >-
           select proj, ROS_num, rows_mln, GB from (
             select projection_name proj, sum(ros_count) ROS_num, round(sum(row_count)/10^6,2) as rows_mln, round(sum(used_bytes)/1024^3,2) as GB
@@ -33,7 +33,7 @@
         count_star: "select count(*) from WebPages;"
 
 
-- name: ---==> SOURCE <==--- Run on source cluster
+- name: ---==> SOURCE <==--- Prepare source database for cloning
   hosts: "{{ src_host }}"
   vars:
     src_host: "{{ hostvars['localhost']['src_host'] }}"
@@ -157,7 +157,9 @@
         - "Recovery Point for {{ src_bucket }} bucket is {{ repl_rp }}"
   - name: <<LOC>> Wait for the data to propogate to the destination
     pause:
-      prompt: "Pausing {{ repl_lag }} seconds to wait for recent updates to propogate to the destination... (Ctrl-C & C to continue)"
+      prompt: >-
+        Pausing {{ repl_lag }} seconds to wait for recent updates to propogate to the destination...
+        (Ctrl-C & C to stop waiting early and continue)
       seconds: "{{ repl_lag }}"
 
 - name: ---==> DESTINATION <==--- Clone and Test from Destination Bucket on Destination Cluster
@@ -229,7 +231,7 @@
     - debug: var=out.stdout_lines
 
 
-- name: ---==> SOURCE <==--- Resume periodic catalog updates
+- name: ---==> SOURCE <==--- Resume periodic catalog updates on source database
   hosts: "{{ src_host }}"
   vars:
     src_host: "{{ hostvars['localhost']['src_host'] }}"
@@ -328,7 +330,7 @@
       register: out
     - debug: var=out.stdout_lines
 
-    - name: Delete the cloned Communal storage for{{ db_name }} database at the destination path
+    - name: <<DST>> Delete the cloned Communal storage for {{ db_name }} database at the destination path
       shell:
         cmd: "{{ my_s5 }} --log=error rm '{{ clone_s3_dst }}*'"
       become: yes

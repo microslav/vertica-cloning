@@ -250,7 +250,7 @@
   tasks:
     - name: <<DST>> Generate the updated cluster_config.json file
       shell:
-        cmd: "{{ my_s5 }} cat '{{ clone_s3_dst }}metadata/verticadb/cluster_config.json' | {{ grab_exe }} > {{ tmp_conf }}"
+        cmd: "{{ my_s5 }} cat '{{ clone_s3_dst }}metadata/{{ db_name }}/cluster_config.json' | {{ grab_exe }} > {{ tmp_conf }}"
       become: yes
       become_user: "{{ run_as }}"
       become_method: su
@@ -259,7 +259,7 @@
 
     - name: <<DST>> Push updated cluster_config.json file to clone path
       shell:
-        cmd: "{{ my_s5 }} cp {{ tmp_conf }} {{ clone_s3_dst }}metadata/verticadb/cluster_config.json"
+        cmd: "{{ my_s5 }} cp {{ tmp_conf }} '{{ clone_s3_dst }}metadata/{{ db_name }}/cluster_config.json'"
       become: yes
       become_user: "{{ run_as }}"
       become_method: su

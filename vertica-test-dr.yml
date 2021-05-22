@@ -154,7 +154,7 @@
         (Ctrl-C & C to stop waiting early and continue)
       seconds: "{{ repl_lag }}"
 
-- name: ---==> DESTINATION <==--- Clone and Test from Destination Bucket on Destination Cluster
+- name: ---==> DESTINATION <==--- Clone the Database from Destination Bucket on Destination Cluster
   hosts: "{{ dst_host }}"
   vars:
     src_host: "{{ hostvars['localhost']['src_host'] }}"
@@ -201,6 +201,7 @@
       become: yes
       become_user: "{{ run_as }}"
       become_method: su
+      ignore_errors: yes
       register: out
     - debug: var=out
 

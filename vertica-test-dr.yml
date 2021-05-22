@@ -44,7 +44,7 @@
     run_as: "{{ hostvars['localhost']['run_as'] }}"
     # Use object credential import in Purity//FB 3.1 to set dbadmin credentials to same values on both src and dst FB
     aws_profile: "default"
-    fb_s3_url: "http://{{ hostvars['localhost']['src_fb_data'] }}:80"
+    fb_s3_url: "http://{{ hostvars['localhost']['dst_fb_data'] }}:80"
     vs_usage: "{{ hostvars['localhost']['vs_usage'] }}"
     count_star: "{{ hostvars['localhost']['count_star'] }}"
   gather_facts: yes
@@ -94,28 +94,31 @@
       register: out
     - debug: var=out.stdout_lines
 
-    - name: <<SRC>> Pause catalog updates and sync
+    - name: <<SRC>> Pause catalog updates and flush
       shell:
-        cmd: "vsql -qt -c \"ALTER DATABASE DEFAULT SET CatalogSyncInterval = '10 years'; SELECT sync_catalog();\" "
+        cmd: >-
+          vsql -qt -c "ALTER DATABASE DEFAULT SET CatalogSyncInterval = '10 years';" &&
+          vsql -qt -c 'SELECT flush_data_collector();' &&
+          vsql -qt -c 'SELECT flush_reaper_queue();'
       become: yes
       become_user: "{{ run_as }}"
       become_method: su
       register: out
     - debug: var=out.stdout_lines
 
-    - name: <<SRC>> Wait until synced to storage
+    - name: <<SRC>> Wait until synced to communal storage
       shell:
         cmd: >-
-          vsql -qt -c 'SELECT * FROM catalog_truncation_status;' | \
+          vsql -qt -c 'SELECT sync_catalog(); SELECT * FROM communal_truncation_status;' |
             awk -F\| '$1 == $2 {print "TRUE"; exit 0;}; {print "FALSE"; exit 1;}'
       become: yes
       become_user: "{{ run_as }}"
       become_method: su
       ignore_errors: yes
       register: out
-      until: out.stdout_lines == "TRUE"
-      retries: 15
-      delay: 1
+      until: out.stdout_lines[0] == "TRUE"
+      retries: 12
+      delay: 5
 
     - name: <<SRC>> Get du -H for source
       shell:

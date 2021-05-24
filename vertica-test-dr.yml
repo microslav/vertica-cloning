@@ -246,6 +246,7 @@
     db_name: "{{ hostvars[lookup('vars','src_host')]['db_name'] }}"
     clone_s3_dst: "{{ hostvars[lookup('vars','src_host')]['clone_s3_dst'] }}"
     vs_usage: "{{ hostvars['localhost']['vs_usage'] }}"
+    count_star: "{{ hostvars['localhost']['count_star'] }}"
   gather_facts: yes
   tasks:
     - name: <<DST>> Generate the updated cluster_config.json file

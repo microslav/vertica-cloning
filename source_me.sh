@@ -17,6 +17,7 @@ set -x
 export RUN_AS="dbadmin"
 export LAG_MAX_WAIT="900"
 export FLUSH_SOURCE="no"
+export CANARY_TABLE="WebPages"
 
 ### Source-side info for the DR demo
 export SRC_FB_MGMT="10.99.100.100"

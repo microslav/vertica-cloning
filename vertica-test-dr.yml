@@ -34,7 +34,7 @@
             select projection_name proj, sum(ros_count) ROS_num, round(sum(row_count)/10^6,2) as rows_mln, round(sum(used_bytes)/1024^3,2) as GB
             from projection_storage where 1=1 group by 1
           ) as x where GB > 0 order by GB desc limit 10;
-        count_star: "select count(*) from WebPages;"
+        count_star: "select count(*) from {{ lookup('env','CANARY_TABLE') }};"
         lag_max_wait: "{{ lookup('env','LAG_MAX_WAIT')|int }}"
         flush_source: "{{ lookup('env','FLUSH_SOURCE')|bool }}"
 

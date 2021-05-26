@@ -1,6 +1,6 @@
 # Test reviving cloned copy of replicated DR database on another cluster
 ---
-- name: ---==> LOCAL <==--- Test reviving cloned copy of replicated DR database on another cluster
+- name: ---==> PLAYBOOK <==--- Test reviving cloned copy of replicated DR database on another cluster
   hosts: localhost
   vars:
     src_hg: "src_cluster"
@@ -35,9 +35,11 @@
             from projection_storage where 1=1 group by 1
           ) as x where GB > 0 order by GB desc limit 10;
         count_star: "select count(*) from WebPages;"
+        lag_max_wait: "{{ lookup('env','LAG_MAX_WAIT')|int }}"
+        flush_source: "{{ lookup('env','FLUSH_SOURCE')|bool }}"
 
 
-- name: ---==> SOURCE <==--- Prepare source database for cloning
+- name: ---==> SOURCE PLAY <==--- Prepare source database for cloning
   hosts: "{{ src_host }}"
   vars:
     src_host: "{{ hostvars['localhost']['src_host'] }}"
@@ -48,6 +50,7 @@
     run_as: "{{ hostvars['localhost']['run_as'] }}"
     vs_usage: "{{ hostvars['localhost']['vs_usage'] }}"
     count_star: "{{ hostvars['localhost']['count_star'] }}"
+    flush_source: "{{ hostvars['localhost']['flush_source'] }}"
   gather_facts: yes
   tasks:
   # Run on Source Cluster
@@ -92,17 +95,26 @@
       register: out
     - debug: var=out.stdout_lines
 
-    - name: <<SRC>> Pause catalog updates and flush
+    - name: <<SRC>> Pause catalog updates
       shell:
         cmd: >-
-          vsql -qt -c "ALTER DATABASE DEFAULT SET CatalogSyncInterval = '10 years';" &&
-           vsql -qt -c 'SELECT flush_data_collector();' &&
-           vsql -qt -c 'SELECT flush_reaper_queue();'
+          vsql -qt -c "ALTER DATABASE DEFAULT SET CatalogSyncInterval = '10 years';"
       become: yes
       become_user: "{{ run_as }}"
       become_method: su
       register: out
     - debug: var=out.stdout_lines
+
+    - name: <<SRC>> Flush Data Collector and Reaper Queue
+      shell:
+        cmd: "vsql -qt -c 'SELECT flush_data_collector(); SELECT flush_reaper_queue();'"
+      become: yes
+      become_user: "{{ run_as }}"
+      become_method: su
+      register: out
+      when: flush_source
+    - debug: var=out.stdout_lines
+      when: flush_source
 
     - name: <<SRC>> Wait until synced to communal storage
       shell:
@@ -118,8 +130,7 @@
       retries: 12
       delay: 5
 
-
-- name: ---==> LOCAL <==--- Wait out the replication lag
+- name: ---==> LOCAL PLAY <==--- Wait out the replication lag
   hosts: localhost
   collections:
   - purestorage.flashblade
@@ -127,6 +138,7 @@
     src_fb_mgmt: "{{ hostvars['localhost']['src_fb_mgmt'] }}"
     src_fb_api: "{{ hostvars['localhost']['src_fb_api'] }}"
     src_bucket: "{{ hostvars['localhost']['src_bucket'] }}"
+    lag_max_wait: "{{ hostvars['localhost']['lag_max_wait'] }}"
   gather_facts: yes
   tasks:
   - name: <<LOC>> Collect FlashBlade bucket replication info
@@ -138,23 +150,30 @@
     ignore_errors: yes
     # Ignore errors just in case. Usually due to self-signed TLS certificates
     register: blade_info
+
   - name: <<LOC>> Set replication variables
     set_fact:
       repl_lag: "{{ ((blade_info['purefb_info']['bucket_replication'][src_bucket]['lag']|float)/1000.0)|round(0,'ceil')|int }}"
       repl_rp: "{{ '%d %b %y %H:%M:%S %Z' | strftime((blade_info['purefb_info']['bucket_replication'][src_bucket]['recovery_point']|int)/1000) }}"
+
   - name: <<LOC>> Show FlashBlade configuration information
     debug:
       msg:
         - "Lag for {{ src_bucket }} bucket is {{ repl_lag }} seconds"
         - "Recovery Point for {{ src_bucket }} bucket is {{ repl_rp }}"
-  - name: <<LOC>> Wait for the data to propogate to the destination
+
+  - name: <<LOC>> Wait for propogation lag if below {{ lag_max_wait }} seconds
     pause:
       prompt: >-
         Pausing {{ repl_lag }} seconds to wait for recent updates to propogate to the destination...
         (Ctrl-C & C to stop waiting early and continue)
       seconds: "{{ repl_lag }}"
+    when: repl_lag <= lag_max_wait
+  - debug:
+      msg: "Not waiting for propogation lag because lag of {{ repl_lag }} is higher than {{ lag_max_wait }} seconds. Roll the dice!"
+    when: repl_lag > lag_max_wait
 
-- name: ---==> DESTINATION <==--- Clone the Database from Destination Bucket on Destination Cluster
+- name: ---==> DESTINATION PLAY <==--- Clone the Database from Destination Bucket on Destination Cluster
   hosts: "{{ dst_host }}"
   vars:
     src_host: "{{ hostvars['localhost']['src_host'] }}"
@@ -214,7 +233,7 @@
     - debug: var=out.stdout_lines
 
 
-- name: ---==> SOURCE <==--- Resume periodic catalog updates on source database
+- name: ---==> SOURCE PLAY <==--- Resume periodic catalog updates on source database
   hosts: "{{ src_host }}"
   vars:
     src_host: "{{ hostvars['localhost']['src_host'] }}"
@@ -232,7 +251,7 @@
   # In production it'll be important to resume the catalog updates manually if the playbook
   # fails before this this step is run. Don't want too much of a backlog.
 
-- name: ---==> DESTINATION <==--- Test the Cloned Database on the Destination Cluster
+- name: ---==> DESTINATION PLAY <==--- Test the Cloned Database on the Destination Cluster
   hosts: "{{ dst_host }}"
   vars:
     src_host: "{{ hostvars['localhost']['src_host'] }}"

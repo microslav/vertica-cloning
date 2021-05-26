@@ -15,6 +15,8 @@ set -x
 
 ### Common info
 export RUN_AS="dbadmin"
+export LAG_MAX_WAIT="900"
+export FLUSH_SOURCE="no"
 
 ### Source-side info for the DR demo
 export SRC_FB_MGMT="10.99.100.100"

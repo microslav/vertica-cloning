@@ -282,6 +282,8 @@
       delegate_to: "{{ dst_host }}"
       register: out
     - debug: var=out.stdout_lines
+      run_once: yes
+      delegate_to: "{{ dst_host }}"
 
     - name: <<DST>> Push updated cluster_config.json file to clone path
       shell:
@@ -293,6 +295,8 @@
       delegate_to: "{{ dst_host }}"
       register: out
     - debug: var=out.stdout_lines
+      run_once: yes
+      delegate_to: "{{ dst_host }}"
 
     - name: <<DST>> Get local Data and Depot directory paths to clean up prior to revive_db
       shell:
@@ -304,6 +308,8 @@
       delegate_to: "{{ dst_host }}"
       register: localdirs
     - debug: var=localdirs.stdout_lines
+      run_once: yes
+      delegate_to: "{{ dst_host }}"
 
     - name: <<DST>> Delete local Data and Depot directories across destination nodes prior to revive_db
       file:
@@ -329,6 +335,8 @@
       delegate_to: "{{ dst_host }}"
       register: out
     - debug: var=out.stdout_lines
+      run_once: yes
+      delegate_to: "{{ dst_host }}"
 
     - name: <<DST>> Start the cloned database as a test
       shell:
@@ -344,6 +352,8 @@
       delegate_to: "{{ dst_host }}"
       register: out
     - debug: var=out.stdout_lines
+      run_once: yes
+      delegate_to: "{{ dst_host }}"
 
     - name: <<DST>> Display large Projections from cloned database
       shell:
@@ -355,6 +365,8 @@
       delegate_to: "{{ dst_host }}"
       register: out
     - debug: var=out.stdout_lines
+      run_once: yes
+      delegate_to: "{{ dst_host }}"
 
     - name: <<DST>> Display count of rows
       shell:
@@ -366,6 +378,8 @@
       delegate_to: "{{ dst_host }}"
       register: out
     - debug: var=out.stdout_lines
+      run_once: yes
+      delegate_to: "{{ dst_host }}"
 
     - name: <<DST>> Stop the cloned database
       shell:
@@ -380,6 +394,8 @@
       delegate_to: "{{ dst_host }}"
       register: out
     - debug: var=out.stdout_lines
+      run_once: yes
+      delegate_to: "{{ dst_host }}"
 
     - name: <<DST>> Drop the cloned database
       shell:
@@ -393,6 +409,8 @@
       delegate_to: "{{ dst_host }}"
       register: out
     - debug: var=out.stdout_lines
+      run_once: yes
+      delegate_to: "{{ dst_host }}"
 
     - name: <<DST>> Delete the cloned Communal storage for {{ db_name }} database at the destination path
       shell:
@@ -404,5 +422,7 @@
       delegate_to: "{{ dst_host }}"
       register: out
     - debug: var=out.stdout_lines
+      run_once: yes
+      delegate_to: "{{ dst_host }}"
 
 ...

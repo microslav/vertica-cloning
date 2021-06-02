@@ -19,7 +19,7 @@
         src_s5: "{{ lookup('env','SRC_S5') }}"
         src_prefix: "{{ lookup('env','SRC_PREFIX') }}"
         dst_prefix: "{{ lookup('env','DST_PREFIX') }}"
-        auth_path: "{{ lookup('env','DST_CLONE_AUTH') }}" 
+        auth_path: "{{ lookup('env','DST_CLONE_AUTH') }}"
         run_as: "{{ lookup('env','RUN_AS') }}"
         vs_usage: >-
           select proj, ROS_num, rows_mln, GB from (
@@ -210,7 +210,7 @@
     dst_nodes: "{{ groups[hostvars['localhost']['dst_group']] | map('extract', hostvars, ['inventory_hostname_short']) | join(',') }}"
     run_as: "{{ hostvars['localhost']['run_as'] }}"
     grab_exe: "grab_lease_now"
-    auth_path: ""{{ hostvars['localhost']['auth_path'] }}""
+    auth_path: "{{ hostvars['localhost']['auth_path'] }}"
     tmp_conf: "/tmp/{{ run_as }}_new_cluster_config.json"
     my_s5: "{{ hostvars['localhost']['src_s5'] }}"
     db_name: "{{ hostvars[lookup('vars','src_host')]['db_name'] }}"

@@ -211,7 +211,7 @@
     grab_exe: "grab_lease_now"
     auth_path: "/home/{{ run_as }}/auth_params.conf"
     tmp_conf: "/tmp/{{ run_as }}_new_cluster_config.json"
-    my_s5: "{{ hostvars['localhost']['dst_s5'] }}"
+    my_s5: "{{ hostvars['localhost']['src_s5'] }}"
     db_name: "{{ hostvars[lookup('vars','src_host')]['db_name'] }}"
     clone_s3_dst: "{{ hostvars[lookup('vars','src_host')]['clone_s3_dst'] }}"
     vs_usage: "{{ hostvars['localhost']['vs_usage'] }}"

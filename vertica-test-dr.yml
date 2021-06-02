@@ -118,7 +118,6 @@
 
     - name: <<SRC>> Wait until synced to communal storage
       shell:
-        # Messages from hurry_service and sync_catalog go to stderr
         cmd: >-
           vsql -qt -c "SELECT hurry_service('System','TxnLogSyncTask');" \
            && vsql -qt -c "SELECT sync_catalog();" \
@@ -297,11 +296,7 @@
 
     - name: <<DST>> Get local Data and Depot directory paths to clean up prior to revive_db
       shell:
-        cmd: >-
-          grep -E "_data|_depot" {{ tmp_conf }}
-           | cut -d\" -f4
-           | xargs dirname
-           | uniq
+        cmd: grep -E "_data|_depot" {{ tmp_conf }} | cut -d\" -f4 | xargs dirname | uniq
       become: yes
       become_user: "{{ run_as }}"
       become_method: su

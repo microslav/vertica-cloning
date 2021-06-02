@@ -120,9 +120,9 @@
       shell:
         # Messages from hurry_service and sync_catalog go to stderr
         cmd: >-
-          vsql -qt -c "SELECT hurry_service('System','TxnLogSyncTask');"
-           && vsql -qt -c "SELECT sync_catalog();"
-           && vsql -qt -c "SELECT count(*) from system_services where service_name='TxnLogSyncTask' and last_run_end is null;" |
+          vsql -qt -c "SELECT hurry_service('System','TxnLogSyncTask');" \
+           && vsql -qt -c "SELECT sync_catalog();" \
+           && vsql -qt -c "SELECT count(*) from system_services where service_name='TxnLogSyncTask' and last_run_end is null;" | \
             sed -e '/^$/d' -e 's/ //g'
       become: yes
       become_user: "{{ run_as }}"
@@ -253,6 +253,7 @@
   - debug: var=out.stdout_lines
   # In production it'll be important to resume the catalog updates manually if the playbook
   # fails before this this step is run. Don't want too much of a backlog.
+
 
 - name: ---==> DESTINATION PLAY <==--- Test the Cloned Database on the Destination Cluster
   hosts: "{{ dst_group }}"

@@ -98,7 +98,7 @@
     - name: <<SRC>> Pause catalog updates
       shell:
         cmd: >-
-          vsql -qt -c "ALTER DATABASE DEFAULT SET CatalogSyncInterval = '10 years';"
+          vsql -qt -c "ALTER DATABASE DEFAULT SET CatalogSyncInterval = '6 hours';"
       become: yes
       become_user: "{{ run_as }}"
       become_method: su
@@ -118,15 +118,18 @@
 
     - name: <<SRC>> Wait until synced to communal storage
       shell:
+        # Messages from hurry_service and sync_catalog go to stderr
         cmd: >-
-          vsql -qt -c 'SELECT sync_catalog(); SELECT * FROM communal_truncation_status;' |
-            awk -F\| '$1 == $2 {print "TRUE"; exit 0;}; {print "FALSE"; exit 1;}'
+          vsql -qt -c "SELECT hurry_service('System','TxnLogSyncTask');"
+           && vsql -qt -c "SELECT sync_catalog();"
+           && vsql -qt -c "SELECT count(*) from system_services where service_name='TxnLogSyncTask' and last_run_end is null;" |
+            sed -e '/^$/d' -e 's/ //g'
       become: yes
       become_user: "{{ run_as }}"
       become_method: su
       ignore_errors: yes
       register: out
-      until: out.stdout_lines[0] == "TRUE"
+      until: out.stdout_lines[0] == "0"
       retries: 12
       delay: 5
 
@@ -252,8 +255,9 @@
   # fails before this this step is run. Don't want too much of a backlog.
 
 - name: ---==> DESTINATION PLAY <==--- Test the Cloned Database on the Destination Cluster
-  hosts: "{{ dst_host }}"
+  hosts: "{{ dst_group }}"
   vars:
+    dst_group: "{{ hostvars['localhost']['dst_group'] }}"
     src_host: "{{ hostvars['localhost']['src_host'] }}"
     dst_host: "{{ hostvars['localhost']['dst_host'] }}"
     dst_nodes: "{{ groups[hostvars['localhost']['dst_group']] | map('extract', hostvars, ['inventory_hostname_short']) | join(',') }}"
@@ -274,6 +278,8 @@
       become: yes
       become_user: "{{ run_as }}"
       become_method: su
+      run_once: yes
+      delegate_to: "{{ dst_host }}"
       register: out
     - debug: var=out.stdout_lines
 
@@ -283,8 +289,33 @@
       become: yes
       become_user: "{{ run_as }}"
       become_method: su
+      run_once: yes
+      delegate_to: "{{ dst_host }}"
       register: out
     - debug: var=out.stdout_lines
+
+    - name: <<DST>> Get local Data and Depot directory paths to clean up prior to revive_db
+      shell:
+        cmd: >-
+          grep -E "_data|_depot" {{ tmp_conf }}
+           | cut -d\" -f4
+           | xargs dirname
+           | uniq
+      become: yes
+      become_user: "{{ run_as }}"
+      become_method: su
+      run_once: yes
+      delegate_to: "{{ dst_host }}"
+      register: localdirs
+    - debug: var=localdirs.stdout_lines
+
+    - name: <<DST>> Delete local Data and Depot directories across destination nodes prior to revive_db
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop: "{{ localdirs.stdout_lines }}"
+      register: out
+    - debug: var=out
 
     - name: <<DST>> Revive the clone database on the destination cluster
       shell:
@@ -298,6 +329,8 @@
       become: yes
       become_user: "{{ run_as }}"
       become_method: su
+      run_once: yes
+      delegate_to: "{{ dst_host }}"
       register: out
     - debug: var=out.stdout_lines
 
@@ -311,6 +344,8 @@
       become: yes
       become_user: "{{ run_as }}"
       become_method: su
+      run_once: yes
+      delegate_to: "{{ dst_host }}"
       register: out
     - debug: var=out.stdout_lines
 
@@ -320,6 +355,8 @@
       become: yes
       become_user: "{{ run_as }}"
       become_method: su
+      run_once: yes
+      delegate_to: "{{ dst_host }}"
       register: out
     - debug: var=out.stdout_lines
 
@@ -329,6 +366,8 @@
       become: yes
       become_user: "{{ run_as }}"
       become_method: su
+      run_once: yes
+      delegate_to: "{{ dst_host }}"
       register: out
     - debug: var=out.stdout_lines
 
@@ -341,6 +380,8 @@
       become: yes
       become_user: "{{ run_as }}"
       become_method: su
+      run_once: yes
+      delegate_to: "{{ dst_host }}"
       register: out
     - debug: var=out.stdout_lines
 
@@ -352,6 +393,8 @@
       become: yes
       become_user: "{{ run_as }}"
       become_method: su
+      run_once: yes
+      delegate_to: "{{ dst_host }}"
       register: out
     - debug: var=out.stdout_lines
 
@@ -361,6 +404,8 @@
       become: yes
       become_user: "{{ run_as }}"
       become_method: su
+      run_once: yes
+      delegate_to: "{{ dst_host }}"
       register: out
     - debug: var=out.stdout_lines
 

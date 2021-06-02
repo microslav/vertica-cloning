@@ -3,10 +3,10 @@
 {
     switch ($0) {
     case /   "ClusterLeaseExpiration" /:
-	print strftime("   \"ClusterLeaseExpiration\" : \"%F %T.000000\",", systime(), 1)
-	break
+	     print strftime("   \"ClusterLeaseExpiration\" : \"%F %T.000000\",", systime(), 1)
+	     break
     default:
-	print $0
+	     print $0
     }
 }
 

@@ -36,6 +36,8 @@ export DST_BUCKET="bos-dr"
 export DST_PREFIX="/test/"
 export DST_AWS_PROFILE="default"
 export DST_S5="AWS_PROFILE=${DST_AWS_PROFILE} s5cmd --endpoint-url=http://${DST_FB_DATA}:80"
+export DST_DR_AUTH="/home/${RUN_AS}/dr_auth_params.conf"
+export DST_CLONE_AUTH="/home/${RUN_AS}/clone_auth_params.conf"
 
 ### Info for the Cloning demo
 export PUREFB_API="$DST_FB_API"

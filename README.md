@@ -1,3 +1,8 @@
+# Merged with PureStorage-OpenConnect space
+The code here has been merged into the https://github.com/PureStorage-OpenConnect/vertica repository as of 2021-June-07. Please look there for more validated versions of the code and releases. 
+
+-----------------------------------------------------
+
 # FlashBlade Object Cloning for Vertica Eon mode
 
 This repository contains example Ansible playbooks with code related to cloning Vertica databases on Pure Storage FlashBlades. There are two main examples, aligned with the two most common use cases:
